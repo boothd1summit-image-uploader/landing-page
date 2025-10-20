@@ -5,67 +5,14 @@
   <title>Upload Image</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #000;
-      color: #fff;
-      margin: 0;
-      padding: 40px 20px;
-    }
-
-    h2 {
-      margin: 10px 0 20px 0;
-      text-align: center;
-    }
-
-    input[type="file"] {
-      padding: 10px;
-      border-radius: 12px;
-      border: none;
-      font-size: 16px;
-      background-color: #333;
-      color: #fff;
-      display: block;
-      margin: 0 auto;
-    }
-
-    button {
-      font-size: 16px;
-      padding: 10px 16px;
-      margin-top: 20px;
-      border: none;
-      border-radius: 999px;
-      background-color: #93CD0C;
-      color: black;
-      cursor: pointer;
-      font-weight: bold;
-      display: block;
-      margin: 20px auto 0;
-      transition: background-color 0.3s ease, transform 0.2s ease;
-    }
-
-    button:hover {
-      background-color: #7fb905;
-      transform: scale(1.03);
-    }
-
-    #status {
-      margin-top: 20px;
-      text-align: center;
-      font-style: italic;
-      color: #ccc;
-      white-space: pre-line;
-    }
-
-    .container {
-      background: #111;
-      padding: 30px;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
-      text-align: center;
-      width: 320px;
-      margin: 0 auto;
-    }
+    body { font-family: Arial, sans-serif; background-color: #000; color: #fff; margin: 0; padding: 40px 20px; }
+    h2 { margin: 10px 0 20px 0; text-align: center; }
+    input[type="file"] { padding: 10px; border-radius: 12px; border: none; font-size: 16px; background-color: #333; color: #fff; display: block; margin: 0 auto; }
+    button { font-size: 16px; padding: 10px 16px; margin-top: 20px; border: none; border-radius: 999px; background-color: #93CD0C; color: black; cursor: pointer; font-weight: bold; display: block; margin: 20px auto 0; transition: background-color 0.3s ease, transform 0.2s ease; }
+    button:hover { background-color: #7fb905; transform: scale(1.03); }
+    #status { margin-top: 20px; text-align: center; font-style: italic; color: #ccc; white-space: pre-line; }
+    .container { background: #111; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1); text-align: center; width: 320px; margin: 0 auto; }
+    input#usernameInput { display:block; margin: 0 auto 12px; padding: 10px; border-radius: 12px; border:none; background:#333; color:#fff; width: 100%; max-width: 280px; }
   </style>
 </head>
 <body>
@@ -80,32 +27,32 @@
 
   <script>
     async function uploadImage() {
-      const fileInput   = document.getElementById("fileInput");
-      const statusEl    = document.getElementById("status");
-      const usernameEl  = document.getElementById("usernameInput");
+      const fileInput  = document.getElementById("fileInput");
+      const statusEl   = document.getElementById("status");
+      const usernameEl = document.getElementById("usernameInput");
 
       const say = (m) => statusEl.textContent = m;
 
-      if (!fileInput.files.length) {
-        alert("Please select an image.");
-        return;
-      }
-
+      if (!fileInput.files.length) { alert("Please select an image."); return; }
       const file = fileInput.files[0];
-      console.log("Selected file:", file.name, file.type);
+
+      // ---- values we will SIGN and then SEND on the PUT (must match exactly) ----
+      const contentType = file.type || "image/png";
+      const metaName = (usernameEl?.value || "anonymous").trim();
+      const metaQrid = "ONE";
+      // --------------------------------------------------------------------------
 
       try {
         const presignUrl = "https://t83rmp2h8i.execute-api.eu-central-1.amazonaws.com/post_function";
         console.log("Fetching presigned URL from:", presignUrl);
 
+        // Send metadata to the presigner so it’s included in the signature
         const presignRes = await fetch(presignUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            content_type: file.type
-            // If your Lambda *signs* metadata, include them and also send in PUT below:
-            // meta_name: (usernameEl?.value || "anonymous").trim(),
-            // meta_qrid: "ONE"
+            contentType,                         // camelCase expected by updated Lambda
+            metadata: { name: metaName, qrid: metaQrid } // <- will be signed
           })
         });
 
@@ -115,19 +62,19 @@
         }
 
         const data = await presignRes.json();
-        if (!data.upload_url) throw new Error("Presign response missing upload_url");
-        console.log("Presigned URL:", data.upload_url);
+        const uploadUrl = data.upload_url;
+        if (!uploadUrl) throw new Error("Presign response missing upload_url");
+        console.log("Presigned URL:", uploadUrl);
 
-        const putHeaders = { "Content-Type": file.type };
-        putHeaders["x-amz-meta-name"] = (usernameEl?.value || "anonymous").trim();
-        putHeaders["x-amz-meta-qrid"] = "ONE";
+        // PUT must use the exact same headers that were signed
+        const putHeaders = {
+          "Content-Type": contentType,
+          "x-amz-meta-name": metaName,
+          "x-amz-meta-qrid": metaQrid
+        };
 
         say("Uploading…");
-        const upload = await fetch(data.upload_url, {
-          method: "PUT",
-          headers: putHeaders,
-          body: file
-        });
+        const upload = await fetch(uploadUrl, { method: "PUT", headers: putHeaders, body: file });
 
         if (upload.ok) {
           console.log("Upload successful");
