@@ -78,23 +78,25 @@
 
         if (upload.ok) {
         // enqueue so we can show a queue number
+        const metaName = (usernameEl?.value || "anonymous").trim();
+
         const enqueueRes = await fetch("https://t83rmp2h8i.execute-api.eu-central-1.amazonaws.com/image-upload-queue-consumer", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            key: data.key,                 // from the presign response
-            contentType: contentType,      // same as you PUT
-            metadata: { name: metaName, qrid: metaQrid } // same as you PUT (if you signed them)
+            key: data.key,                     // from presign response
+            contentType: contentType,          // same as PUT
+            metadata: { name: metaName, qrid: "ONE" }  // include name here too
           })
         });
         
         if (enqueueRes.ok) {
-          const { position } = await enqueueRes.json();
-          say(`Upload successful! You are no. ${position} in the queue`);
+          const { position, seq } = await enqueueRes.json();
+          say(`Upload successful! You are no. ${position} in the queue (ticket ${seq}).`);
         } else {
           say(`Upload successful! (queued but position unknown)`);
         }
-        }  else {
+        else {
           const errText = await upload.text().catch(() => "");
           console.error("Upload failed:", upload.status, errText);
           say(`Upload failed.\n${upload.status} ${upload.statusText}\n${errText.slice(0, 400)}`);
