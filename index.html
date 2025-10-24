@@ -5,109 +5,120 @@
   <title>Upload Image</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    body { font-family: Arial, sans-serif; background-color: #000; color: #fff; margin: 0; padding: 40px 20px; }
-    h2 { margin: 10px 0 20px 0; text-align: center; }
-    input[type="file"] { padding: 10px; border-radius: 12px; border: none; font-size: 16px; background-color: #333; color: #fff; display: block; margin: 0 auto; }
-    button { font-size: 16px; padding: 10px 16px; margin-top: 20px; border: none; border-radius: 999px; background-color: #93CD0C; color: black; cursor: pointer; font-weight: bold; display: block; margin: 20px auto 0; transition: background-color 0.3s ease, transform 0.2s ease; }
-    button:hover { background-color: #7fb905; transform: scale(1.03); }
-    #status { margin-top: 20px; text-align: center; font-style: italic; color: #ccc; white-space: pre-line; }
-    .container { background: #111; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1); text-align: center; width: 320px; margin: 0 auto; }
-    input#usernameInput { display:block; margin: 0 auto 12px; padding: 10px; border-radius: 12px; border:none; background:#333; color:#fff; width: 100%; max-width: 280px; }
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #000;
+      color: #fff;
+      margin: 0;
+      padding: 40px 20px;
+    }
+
+    h2 {
+      margin: 10px 0 20px 0;
+      text-align: center;
+    }
+
+    input[type="file"] {
+      padding: 10px;
+      border-radius: 12px;
+      border: none;
+      font-size: 16px;
+      background-color: #333;
+      color: #fff;
+      display: block;
+      margin: 0 auto;
+    }
+
+    button {
+      font-size: 16px;
+      padding: 10px 16px;
+      margin-top: 20px;
+      border: none;
+      border-radius: 999px;
+      background-color: #93CD0C;
+      color: black;
+      cursor: pointer;
+      font-weight: bold;
+      display: block;
+      margin: 20px auto 0;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+    }
+
+    button:hover {
+      background-color: #7fb905;
+      transform: scale(1.03);
+    }
+
+    #status {
+      margin-top: 20px;
+      text-align: center;
+      font-style: italic;
+      color: #ccc;
+    }
+
+    .container {
+      background: #111;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(255, 255, 255, 0.1);
+      text-align: center;
+      width: 320px;
+      margin: 0 auto;
+    }
   </style>
 </head>
 <body>
 
   <div class="container">
     <h2>Upload Your Image</h2>
-    <input id="usernameInput" placeholder="Your name (optional)" />
     <input type="file" id="fileInput" accept="image/*"><br><br>
     <button onclick="uploadImage()">Upload</button>
     <p id="status"></p>
   </div>
 
   <script>
-  async function uploadImage() {
-    const fileInput  = document.getElementById("fileInput");
-    const statusEl   = document.getElementById("status");
-    const usernameEl = document.getElementById("usernameInput");
+    async function uploadImage() {
+      const fileInput = document.getElementById("fileInput");
+      const statusEl = document.getElementById("status");
 
-    const say = (m) => statusEl.textContent = m;
-
-    if (!fileInput.files.length) { alert("Please select an image."); return; }
-    const file = fileInput.files[0];
-
-    const contentType = file.type || "image/png";
-    const metaName = (usernameEl?.value || "anonymous").trim();
-    const metaQrid = "ONE";
-
-    try {
-      const presignUrl = "https://t83rmp2h8i.execute-api.eu-central-1.amazonaws.com/post_function";
-
-      // 1) Get presigned URL (signing metadata too)
-      const presignRes = await fetch(presignUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contentType,
-          metadata: { name: metaName, qrid: metaQrid }
-        })
-      });
-
-      if (!presignRes.ok) {
-        const t = await presignRes.text().catch(() => "");
-        throw new Error(`Presign failed: ${presignRes.status} ${t}`);
+      if (!fileInput.files.length) {
+        alert("Please select an image.");
+        return;
       }
 
-      const data = await presignRes.json();
-      const uploadUrl = data.upload_url;
-      if (!uploadUrl) throw new Error("Presign response missing upload_url");
+      const file = fileInput.files[0];
+      console.log("Selected file:", file.name, file.type);
 
-      // 2) Upload to S3 with the exact same headers that were signed
-      say("Uploading…");
-      const putHeaders = {
-        "Content-Type": contentType,
-        "x-amz-meta-name": metaName,
-        "x-amz-meta-qrid": metaQrid
-      };
-      const upload = await fetch(uploadUrl, { method: "PUT", headers: putHeaders, body: file });
+      try {
+        const apiUrl = `https://t83rmp2h8i.execute-api.eu-central-1.amazonaws.com/post_function?content_type=${encodeURIComponent(file.type)}`;
+        console.log("Fetching presigned URL from:", apiUrl);
 
-      if (upload.ok) {
-        // 3) Enqueue to get queue position
-        const enqueueUrl = "https://t83rmp2h8i.execute-api.eu-central-1.amazonaws.com/image-upload-queue-consumer";
-        const enqueueRes = await fetch(enqueueUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            key: data.key,                 // from presign response
-            contentType: contentType,      // must match PUT
-            metadata: { name: metaName, qrid: "ONE" }
-          })
+        const response = await fetch(apiUrl);
+        if (!response.ok) throw new Error(`API call failed: ${response.status}`);
+
+        const data = await response.json();
+        console.log("Presigned URL:", data.upload_url);
+
+        const upload = await fetch(data.upload_url, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file
         });
 
-        if (enqueueRes.ok) {
-          const { position, seq } = await enqueueRes.json().catch(() => ({}));
-          if (position != null) {
-            say(`Upload successful! You are no. ${position} in the queue${seq ? ` (ticket ${seq})` : ""}.`);
-          } else {
-            say(`Upload successful! (queued but position unknown)`);
-          }
+        if (upload.ok) {
+          console.log("Upload successful");
+          statusEl.textContent = "Upload successful!";
         } else {
-          const errTxt = await enqueueRes.text().catch(() => "");
-          console.error("Enqueue failed:", enqueueRes.status, errTxt);
-          say(`Upload successful! (queued but position unknown)`);
+          console.error("Upload failed:", upload.status);
+          statusEl.textContent = "Upload failed.";
         }
-      } else {
-        const errText = await upload.text().catch(() => "");
-        console.error("Upload failed:", upload.status, errText);
-        say(`Upload failed.\n${upload.status} ${upload.statusText}\n${(errText||"").slice(0, 400)}`);
-      }
-    } catch (err) {
-      console.error("Error:", err);
-      say(`Upload failed (check console).\n${err.message || err}`);
-    }
-  }
-</script>
 
+      } catch (err) {
+        console.error("Error:", err);
+        statusEl.textContent = "Upload failed (check console).";
+      }
+    }
+  </script>
 
 </body>
 </html>
