@@ -19,6 +19,7 @@
 
   <div class="container">
     <h2>Upload Your Image</h2>
+    <input id="usernameInput" placeholder="Your name (optional)" />
     <input type="file" id="fileInput" accept="image/*"><br><br>
     <button onclick="uploadImage()">Upload</button>
     <p id="status"></p>
@@ -82,33 +83,28 @@
             metadata: { name: metaName, qrid: "ONE" }
           })
         });
-      }
-      else {
+
+        if (enqueueRes.ok) {
+          const { position, seq } = await enqueueRes.json().catch(() => ({}));
+          if (position != null) {
+            say(`Upload successful! You are no. ${position} in the queue${seq ? ` (ticket ${seq})` : ""}.`);
+          } else {
+            say(`Upload successful! (queued but position unknown)`);
+          }
+        } else {
+          const errTxt = await enqueueRes.text().catch(() => "");
+          console.error("Enqueue failed:", enqueueRes.status, errTxt);
+          say(`Upload successful! (queued but position unknown)`);
+        }
+      } else {
         const errText = await upload.text().catch(() => "");
         console.error("Upload failed:", upload.status, errText);
         say(`Upload failed.\n${upload.status} ${upload.statusText}\n${(errText||"").slice(0, 400)}`);
       }
-    //     if (enqueueRes.ok) {
-    //       const { position, seq } = await enqueueRes.json().catch(() => ({}));
-    //       if (position != null) {
-    //         say(`Upload successful! You are no. ${position} in the queue${seq ? ` (ticket ${seq})` : ""}.`);
-    //       } else {
-    //         say(`Upload successful! (queued but position unknown)`);
-    //       }
-    //     } else {
-    //       const errTxt = await enqueueRes.text().catch(() => "");
-    //       console.error("Enqueue failed:", enqueueRes.status, errTxt);
-    //       say(`Upload successful! (queued but position unknown)`);
-    //     }
-    //   } else {
-    //     const errText = await upload.text().catch(() => "");
-    //     console.error("Upload failed:", upload.status, errText);
-    //     say(`Upload failed.\n${upload.status} ${upload.statusText}\n${(errText||"").slice(0, 400)}`);
-    //   }
-    // } catch (err) {
-    //   console.error("Error:", err);
-    //   say(`Upload failed (check console).\n${err.message || err}`);
-    // }
+    } catch (err) {
+      console.error("Error:", err);
+      say(`Upload failed (check console).\n${err.message || err}`);
+    }
   }
 </script>
 
